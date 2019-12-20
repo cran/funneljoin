@@ -1,0 +1,195 @@
+---
+title: "Introduction to funneljoin"
+author: "Emily Robinson"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Introduction to funneljoin}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>", 
+  message = FALSE
+)
+```
+
+The goal of funneljoin is to make it easy to analyze behavior funnels. For example, maybe you're interested in finding the people who visit a page and then register. Or you want all the times people click on an item and add it to their cart within 2 days. 
+
+You can do this with funneljoin's `after_join()` function. The arguments are: 
+
+  - `x`: a dataset with the first set of behaviors.
+  - `y`: a dataset with the second set of behaviors.
+  - `by_time`: a character vector to specify the time columns in x and y. Must be a single column in each tbl. Note that this column is used to filter for time y >= time x.
+  - `by_user`: a character vector to specify the user or identity columns in x and y. Must be a single column in each tbl.
+  - `mode`: the method used to join: "inner", "full", "anti", "semi", "right", "left".
+  - `type`: the type of funnel used to distinguish between event pairs, such as "first-first", "last-first", "any-firstafter". See types of funnels.
+  - `max_gap` (optional): the maximum gap between events. Can be a integer representing the number of seconds or a difftime object
+  
+## after_join types
+
+Funneljoins can be any combination of `first`, `last`, `any`, and `lastbefore` with `first`, `last`,  `any`, and `firstafter`.
+
+Let's take an example. We'll use two tables, one of landings and one of registrations, that come with the package. Each has a `user_id` and `timestamp` column. 
+
+```{r}
+library(dplyr)
+library(funneljoin)
+```
+
+```{r}
+landed
+```
+
+```{r}
+registered
+```
+
+Let's say we wanted to get only the first time people landed and the first time they registered, *if* it was after their first landing. We would use a `first-first inner` join. 
+
+```{r}
+landed %>%
+  after_inner_join(registered, 
+                   by_user = "user_id",
+                   by_time = "timestamp",
+                   type = "first-first")
+```
+
+We now have a dataset of four rows. Notice a few things: 
+
+  - `timestamp.y` is always greater than or equal to `timestamp.x`. This is a condition of `after_join`.
+  - Because it's an `inner` join, we only have users who were in both tables and had a `timestamp.y` that was greater than a `timestamp.x`. 
+  - We only have one entry per user, as we made each table distinct by user, taking only their first landing or registration, before joining.
+  - Although user 4 had a registration after a landing ("2018-07-01" landing and "2018-07-02" registration), they are not in the table because their **first** registration was on "2018-06-10", so we only checked if that happened after their first landing. 
+
+## Max gap 
+
+What if instead we wanted all landing-registration pairs that happened within a 4-day window? We now add the `max_gap` argument. This takes either a number, which is the number of seconds, or a difftime object. Instead of calculating the number of seconds in 4 days, we'll just make a difftime object. Because we want any pair, not just the pairs of the first landings and registrations, we change the type to `any-any`.
+
+We'll also add `gap_col = TRUE` to return a column, `.gap`, which is the gap in seconds between the events.
+
+```{r}
+landed %>%
+  after_inner_join(registered, 
+                   by_user = "user_id",
+                   by_time = "timestamp",
+                   type = "any-any", 
+                   max_gap = as.difftime(4, units = "days"),
+                   gap_col = TRUE)
+```
+
+We now have a dataset of 7 rows. Notice a few things: 
+
+  - As always, `timestamp.y` is greater than or equal to `timestamp.x`. 
+  - User 6 appears three times, as they have three landing-registration pairs where the time difference is less than four days.
+  - Just as before, because it's an `inner` join, we only have users who were in both tables and had a `timestamp.y` that was greater than a `timestamp.x`. 
+
+## Other types of joins
+
+Left joins are very handy when you want to know what percentage of people who did X did Y afterward. For example, we may have an experiment where we want to know "what percentage of people registered after entering the experiment?"
+
+In this case, we'd use a `first-firstafter` left join - we want to get a person's first experiment start and then their first registration afterward, if they have one. Let's add another column to our experiment starts table, which experiment variant someone was in. 
+
+```{r}
+experiment_starts <- tibble::tribble(
+  ~user_id, ~timestamp, ~ alternative.name,
+  1, "2018-07-01", "control",
+  2, "2018-07-01", "treatment",
+  3, "2018-07-02", "control",
+  4, "2018-07-01", "control",
+  4, "2018-07-04", "control",
+  5, "2018-07-10", "treatment",
+  5, "2018-07-12", "treatment",
+  6, "2018-07-07", "treatment",
+  6, "2018-07-08", "treatment"
+) %>%
+  mutate(timestamp = as.Date(timestamp))
+
+experiment_registrations <- tibble::tribble(
+  ~user_id, ~timestamp, 
+  1, "2018-07-02", 
+  3, "2018-07-02", 
+  4, "2018-06-10", 
+  4, "2018-07-02", 
+  5, "2018-07-11", 
+  6, "2018-07-10", 
+  6, "2018-07-11", 
+  7, "2018-07-07"
+) %>%
+  mutate(timestamp = as.Date(timestamp))
+```
+
+```{r}
+experiment_starts %>%
+  after_left_join(experiment_registrations, 
+                   by_user = "user_id",
+                   by_time = "timestamp",
+                   type = "first-firstafter")
+```
+
+We now have an entry for each user in the experiment_starts table, which has the time of their first registration afterward or NA if they did not have a registration afterwards. Each user only appears once since it's a `first-something` join.   
+
+We can use funneljoin's `summarize_conversions()` function to get the number of starts and number of conversions (registrations) in each group - you just need to specify the column that indicates whether someone converted - if it's NA or FALSE, it will be treated as FALSE, otherwise TRUE. 
+
+```{r}
+experiment_starts %>%
+  after_left_join(experiment_registrations, 
+                   by_user = "user_id",
+                   by_time = "timestamp",
+                   type = "first-firstafter") %>% 
+  group_by(alternative.name) %>%
+  summarize_conversions(converted = timestamp.y)
+```
+
+`summarize_conversions` also works if we have multiple types of conversions, specified by a column.
+
+```{r}
+for_conversion <- tibble::tribble(
+  ~"experiment_group", ~"first_event", ~"last_event", ~"type", 
+  "control", "2018-07-01", NA, "click",
+  "control", "2018-07-02", NA, "click",
+  "control", "2018-07-03", "2018-07-05", "click",
+  "treatment", "2018-07-01", "2018-07-05", "click",
+  "treatment", "2018-07-01", "2018-07-05", "click",
+  "control", "2018-07-01", NA, "purchase",
+  "control", "2018-07-02", NA, "purchase",
+  "control", "2018-07-03", NA, "purchase",
+  "treatment", "2018-07-01", NA, "purchase",
+  "treatment", "2018-07-01", "2018-07-05", "purchase"
+)
+
+for_conversion %>%
+  group_by(type, experiment_group) %>%
+  summarize_conversions(converted = last_event)
+```
+
+## Summarize Prop Tests
+
+`summarize_prop_tests()` takes in a dataset with at least three columns - `nb_users`, `nb_conversions`, and a column indicating experiment group. It can also have an additional column that is the type of conversion - for example, you could have clicks and purchases. Each type of conversion can only have two rows, one `control` and one other group. If you have that additional column of type, you need to group by it first. 
+
+It returns a dataset with at least 5 columns:
+
+  - `control`: the conversion rate of the control group
+  - `treatment`: the  conversion rate of the treatment group
+  - `p_value` of the proportion test
+  - `pct_change`: the percentage difference between the control and treatment group
+  - `pct_change_low` and `pct_change_high`: the bayesian estimates for a 90% confidence interval. 
+  
+If you had a type column, it will also be in the output. 
+
+```{r}
+tbl <- tibble::tribble(
+  ~ experiment_group, ~nb_users, ~nb_conversions, ~type,
+  "control", 500, 200, "purchase",
+  "treatment", 500, 100, "purchase", 
+  "control", 500, 360, "click",
+  "treatment", 500, 375, "click"
+)
+
+tbl %>%
+  group_by(type) %>%
+  summarize_prop_tests(alternative_name = experiment_group)
+```
