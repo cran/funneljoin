@@ -1,11 +1,12 @@
 Package: funneljoin
 Type: Package
 Title: Time-Based Joins to Analyze Sequences of Events
-Version: 0.1.0
+Version: 0.2.0
 Authors@R: c(
     person("Emily", "Robinson", email = "robinson.es@gmail.com", role = c("aut", "cre")),
     person("Anthony", "Baker", email = "anthony@datacamp.com", role = c("aut")),
-    person("David", "Robinson", email = "admiral.david@gmail.com", role = c("aut")))
+    person("David", "Robinson", email = "admiral.david@gmail.com", role = c("aut")),
+    person("Jacqueline", "Nolis", email = "jacquelinenolis@outlook.com", role = c("art")))
 Depends: R (>= 2.10)
 Maintainer: Emily Robinson <robinson.es@gmail.com>
 Description: Time-based joins to analyze sequence of events, 
@@ -17,15 +18,16 @@ Description: Time-based joins to analyze sequence of events,
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
-Suggests: testthat, knitr, rmarkdown
-RoxygenNote: 7.0.2
-Imports: dplyr, glue, tibble, magrittr, broom, purrr, rlang, tidyr,
-        methods
+Suggests: testthat, knitr, rmarkdown, tibble
+RoxygenNote: 7.2.1
+Imports: dplyr, glue, magrittr, broom, purrr, rlang, tidyr, methods,
+        forcats
 VignetteBuilder: knitr
 NeedsCompilation: no
-Packaged: 2019-12-11 14:45:22 UTC; emily.robinson
+Packaged: 2023-03-21 19:35:45 UTC; emilyrobinson
 Author: Emily Robinson [aut, cre],
   Anthony Baker [aut],
-  David Robinson [aut]
+  David Robinson [aut],
+  Jacqueline Nolis [art]
 Repository: CRAN
-Date/Publication: 2019-12-20 14:30:02 UTC
+Date/Publication: 2023-03-21 20:00:02 UTC
